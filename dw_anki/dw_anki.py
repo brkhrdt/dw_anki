@@ -168,7 +168,7 @@ def buildAnkiFromURL(vocabURL):
             downloadFromURL(audioUrl, audioPath)
             audio64 = fileToBase64(audioPath)
             invoke(storeMediaFile(audioFilename, audio64))
-            deHTML = deHTML + "[sound:{}]".format(audioFilename)
+            deHTML = "[sound:{}]".format(audioFilename) + deHTML
         else:
             log.warning("No audio found:" + de)
 
