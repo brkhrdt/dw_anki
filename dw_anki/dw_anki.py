@@ -6,6 +6,11 @@ import json
 import base64
 import re
 import logging
+import subprocess #to call lame/convert to resize media
+
+# Top page for Nicos Weg A1
+TOP_URL= 'https://learngerman.dw.com/en/beginners/c-36519789'
+#TOP_URL = 'https://learngerman.dw.com/en/elementary/c-36519797'
 
 DW_URL = 'https://learngerman.dw.com/'
 deck = 'DW Nicos Weg A1'
@@ -116,6 +121,30 @@ def fileToBase64(path):
     with open(path, "rb") as fh:
         return base64.b64encode(fh.read()).decode()
 
+def reduceImageSize(path):
+    backupDir = "{}/{}".format(IMAGES_DIR,"backup")
+    if not os.path.isdir(backupDir):
+        os.mkdir(backupDir)
+    fileName = os.path.basename(path)
+    os.system("cp {} {}".format(path, "{}/{}".format(backupDir,fileName)))
+    res = subprocess.run(["convert", "-resize", "25%", path, path],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if res.returncode != 0:
+        log.error("Failed to reduce image size: " + path)
+    return
+
+def reduceAudioSize(path):
+    backupDir = "{}/{}".format(AUDIO_DIR,"backup")
+    if not os.path.isdir(backupDir):
+        os.mkdir(backupDir)
+    fileName = os.path.basename(path)
+    os.system("cp {} {}".format(path, "{}/{}".format(backupDir,fileName)))
+    res = subprocess.run(["lame", "-b", "32", "{}/{}".format(backupDir,fileName), path],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if res.returncode != 0:
+        log.error("Failed to reduce audio size: " + path)
+        log.error(res.stderr)
+    return
 
 def getVocabRows(tree):
     rows = tree.xpath('//div[@class="row vocabulary "]')
@@ -156,6 +185,7 @@ def buildAnkiFromURL(vocabURL):
             imgPath = "{}/{}".format(IMAGES_DIR, imgFilename)
             log.info("Downloading image: " + imgUrl)
             downloadFromURL(imgUrl, imgPath)
+            reduceImageSize(imgPath)
             img64 = fileToBase64(imgPath)
             enHTML = enHTML + '<br><img src="' + imgFilename+ '" width="50%" height="50%">'
             invoke(storeMediaFile(imgFilename, img64))
@@ -166,6 +196,7 @@ def buildAnkiFromURL(vocabURL):
             audioPath = "{}/{}".format(AUDIO_DIR, audioFilename)
             log.info("Downloading audio: " + audioUrl)
             downloadFromURL(audioUrl, audioPath)
+            reduceAudioSize(audioPath)
             audio64 = fileToBase64(audioPath)
             invoke(storeMediaFile(audioFilename, audio64))
             deHTML = "[sound:{}]".format(audioFilename) + deHTML
@@ -203,12 +234,9 @@ def main():
                         ])
 
 
-    # Top page for Nicos Weg A1
-    topURL = 'https://learngerman.dw.com/en/beginners/c-36519789'
-
     log.info("Starting...")
-    log.info("Using lessons from: " + topURL)
-    lessonURLs = getLessonURLs(topURL)
+    log.info("Using lessons from: " + TOP_URL)
+    lessonURLs = getLessonURLs(TOP_URL)
 
     for url in lessonURLs:
         log.info("Building Anki cards from: " + url)
