@@ -226,7 +226,7 @@ def getLessonURLs(url):
 def storeImage(imgURL):
     if not imgURL:
         return None
-    imgFilename = os.path.basename(imgURL)
+    imgFilename = re.sub(r'\s+', '_', os.path.basename(imgURL))
     imgPath = "{}/{}".format(IMAGES_DIR, imgFilename)
     log.info("Downloading image: " + imgURL)
     dlSuccess = downloadFromURL(imgURL, imgPath)
@@ -242,7 +242,7 @@ def storeImage(imgURL):
 def storeAudio(audioURL):
     if not audioURL:
         return None
-    audioFilename = os.path.basename(audioURL)
+    audioFilename = re.sub(r'\s+', '_', os.path.basename(audioURL))
     audioPath = "{}/{}".format(AUDIO_DIR, audioFilename)
     log.info("Downloading audio: " + audioURL)
     dlSuccess = downloadFromURL(audioURL, audioPath)
