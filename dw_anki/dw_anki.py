@@ -7,6 +7,7 @@ import base64
 import re
 import logging
 import subprocess #to call lame/convert to resize media
+import operator
 
 # Top page for Nicos Weg A1
 TOP_URL= 'https://learngerman.dw.com/en/beginners/c-36519789'
@@ -18,6 +19,7 @@ AUDIO_DIR = 'audio'
 log = logging.getLogger(__name__)
 
 class AnkiCard:
+    cardCount = 0
     def __init__(self, deck):
         self.deck = deck
         self.tags = []
@@ -25,6 +27,8 @@ class AnkiCard:
         self.german = []
         self.hasImage = 0
         self.hasAudio = 0
+        self.cardNumber = AnkiCard.cardCount
+        AnkiCard.cardCount += 1
 
     def addTag(self, tag):
         (self.tags).append(tag)
@@ -52,12 +56,12 @@ class AnkiCard:
         log.debug("addGerman after: " + ", ".join(self.german))
 
     def getEnglish(self):
-        return "<br><br>".join(self.english)
+        entries = list(set(self.english)) # remove duplicates
+        return "<br><br>".join(entries)
 
     def getGerman(self):
-        return "<br><br>".join(self.german)
-
-
+        entries = list(set(self.german)) # remove duplicates
+        return "<br><br>".join(entries)
 
 
 #
@@ -292,7 +296,7 @@ def buildAnkiFromURL(cards, vocabURL):
             cards[en] = card
 
 def storeCards(cards):
-    for card in cards.values():
+    for card in sorted(cards.values(), key = operator.attrgetter('cardNumber')):
         req = addNoteJSON(card.deck,
                           card.tags,
                           card.getEnglish(),

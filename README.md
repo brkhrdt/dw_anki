@@ -6,9 +6,12 @@ Script to grab all of the vocab words from the Deutsche Welle lessons and create
 2. Edit hardcodes until options are ever added.
 - URL for the root of the lesson A1, A2, B1, etc.
 - Deck name. This needs to be created in Anki as well
-3. python3 -m venv <area>
-4. python3 setup.py install
-5. dw_anki
+3. python3 -m venv area_name
+4. cd area_name
+5. git clone git@github.com:brkhrdt/dw_anki.git
+6. cd dw_anki
+7. python3 setup.py install
+8. dw_anki
 
 Downloads all images to $PWD/images and audio to $PWD/audio.
 
