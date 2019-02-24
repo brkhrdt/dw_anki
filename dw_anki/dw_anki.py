@@ -10,13 +10,55 @@ import subprocess #to call lame/convert to resize media
 
 # Top page for Nicos Weg A1
 TOP_URL= 'https://learngerman.dw.com/en/beginners/c-36519789'
-#TOP_URL = 'https://learngerman.dw.com/en/elementary/c-36519797'
 
 DW_URL = 'https://learngerman.dw.com/'
-deck = 'DW Nicos Weg A1'
+DECK_NAME = 'DW Nicos Weg A1'
 IMAGES_DIR = 'images'
 AUDIO_DIR = 'audio'
 log = logging.getLogger(__name__)
+
+class AnkiCard:
+    def __init__(self, deck):
+        self.deck = deck
+        self.tags = []
+        self.english = []
+        self.german = []
+        self.hasImage = 0
+        self.hasAudio = 0
+
+    def addTag(self, tag):
+        (self.tags).append(tag)
+
+    def addEnglish(self, english, imgFilename=None, audioFilename=None):
+        audioHTML = ""
+        englishHTML = english
+        imgHTML = ""
+        if audioFilename:
+            audioHTML = "[sound:{}]".format(audioFilename)
+        if imgFilename:
+            imgHTML = '<br><img src="' + imgFilename + '" width="50%" height="50%">'
+        (self.english).append(audioHTML + englishHTML + imgHTML)
+
+    def addGerman(self, german, audioFilename=None, imgFilename=None):
+        audioHTML = ""
+        log.debug("addGerman::german = " + german)
+        germanHTML = german
+        imgHTML = ""
+        if audioFilename:
+            audioHTML = "[sound:{}]".format(audioFilename)
+        if imgFilename:
+            imgHTML = '<img src="' + imgFilename + '" width="50%" height="50%"><br>'
+        (self.german).append(audioHTML + germanHTML + imgHTML)
+        log.debug("addGerman after: " + ", ".join(self.german))
+
+    def getEnglish(self):
+        return "<br><br>".join(self.english)
+
+    def getGerman(self):
+        return "<br><br>".join(self.german)
+
+
+
 
 #
 # Interacting with AnkiConnect
@@ -39,13 +81,23 @@ def invoke(requestJson):
         raise Warning(response['error'])
     return response['result']
 
-def storeMediaFile(filename, data64):
+def storeMediaFileJSON(filename, data64):
     request = {
         "action": "storeMediaFile",
         "version": 6,
         "params": {
             "filename": filename,
             "data": data64
+        }
+    }
+    return json.dumps(request)
+
+def createDeckJSON(deck):
+    request = {
+        "action": "createDeck",
+        "version": 6,
+        "params": {
+            "deck": deck
         }
     }
     return json.dumps(request)
@@ -77,11 +129,11 @@ def addNoteJSON(deck, tags, front, back):
 #
 
 def getGermanFromRow(reihe):
-    worter = reihe.xpath('.//strong[@dir="auto"]/text()')
+    woerter = reihe.xpath('.//strong[@dir="auto"]/text()')
     notizen = reihe.xpath('.//div[1]/div/p/text()')
     notiz = (''.join(notizen)).replace('\n','')
     #//*[@id="html_body"]/div[2]/div/div/div/div[2]/div[3]/div[1]/div/p/text()
-    wort = worter[0]
+    wort = woerter[0]
     if notiz:
         wort = wort + " <br><small><i>" + notiz + "</i></small>"
     return wort
@@ -109,12 +161,14 @@ def getAudioURLFromRow(row):
 
 def downloadFromURL(url, path):
     if os.path.isfile(path):
-        return
+        return 1
     r = requests.get(url, stream=True)
     if r.status_code == 200:
         with open(path, 'wb') as f:
             for chunk in r:
                 f.write(chunk)
+        return 1
+    return 0
 
 
 def fileToBase64(path):
@@ -126,8 +180,12 @@ def reduceImageSize(path):
     if not os.path.isdir(backupDir):
         os.mkdir(backupDir)
     fileName = os.path.basename(path)
-    os.system("cp {} {}".format(path, "{}/{}".format(backupDir,fileName)))
-    res = subprocess.run(["convert", "-resize", "25%", path, path],
+    backupFilePath = "{}/{}".format(backupDir,fileName)
+    # We'll use the backup copy to generate reduced file.
+    # If it exists don't copy b/c repeat runs will shrink more
+    if not os.path.isfile(backupFilePath):
+        os.system("cp {} {}".format(path, backupFilePath))
+    res = subprocess.run(["convert", "-resize", "25%", backupFilePath, path],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if res.returncode != 0:
         log.error("Failed to reduce image size: " + path)
@@ -138,8 +196,12 @@ def reduceAudioSize(path):
     if not os.path.isdir(backupDir):
         os.mkdir(backupDir)
     fileName = os.path.basename(path)
-    os.system("cp {} {}".format(path, "{}/{}".format(backupDir,fileName)))
-    res = subprocess.run(["lame", "-b", "32", "{}/{}".format(backupDir,fileName), path],
+    backupFilePath = "{}/{}".format(backupDir,fileName)
+    # We'll use the backup copy to generate reduced file.
+    # If it exists don't copy b/c repeat runs will shrink more
+    if not os.path.isfile(backupFilePath):
+        os.system("cp {} {}".format(path, backupFilePath))
+    res = subprocess.run(["lame", "-b", "32", backupFilePath, path],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if res.returncode != 0:
         log.error("Failed to reduce audio size: " + path)
@@ -161,8 +223,40 @@ def getLessonURLs(url):
     lessonURLs = list(map((lambda url: DW_URL + url + '/lv'), lessonURLs))
     return lessonURLs
 
+def storeImage(imgURL):
+    if not imgURL:
+        return None
+    imgFilename = os.path.basename(imgURL)
+    imgPath = "{}/{}".format(IMAGES_DIR, imgFilename)
+    log.info("Downloading image: " + imgURL)
+    dlSuccess = downloadFromURL(imgURL, imgPath)
+    if dlSuccess:
+        reduceImageSize(imgPath)
+        img64 = fileToBase64(imgPath)
+        log.info("Storing image in Anki: " + imgFilename)
+        res = invoke(storeMediaFileJSON(imgFilename, img64))
+        if res == None:
+            return imgFilename
+    return None
 
-def buildAnkiFromURL(vocabURL):
+def storeAudio(audioURL):
+    if not audioURL:
+        return None
+    audioFilename = os.path.basename(audioURL)
+    audioPath = "{}/{}".format(AUDIO_DIR, audioFilename)
+    log.info("Downloading audio: " + audioURL)
+    dlSuccess = downloadFromURL(audioURL, audioPath)
+    if dlSuccess:
+        reduceAudioSize(audioPath)
+        audio64 = fileToBase64(audioPath)
+        log.info("Storing audio in Anki: " + audioFilename)
+        res = invoke(storeMediaFileJSON(audioFilename, audio64))
+        if res == None:
+            return audioFilename
+    log.warning("No audio available:" + de)
+    return None
+
+def buildAnkiFromURL(cards, vocabURL):
     try:
         lessonName = (re.search('en\/([^\/]+)\/', vocabURL)).group(1)
     except AttributeError:
@@ -172,48 +266,47 @@ def buildAnkiFromURL(vocabURL):
     tree = html.fromstring(page.content)
 
     vocab_rows = tree.xpath('//div[@class="row vocabulary "]')
-    tags = [lessonName]
+    tag = lessonName
 
     for row in vocab_rows:
         de = getGermanFromRow(row)
         en = getEnglishFromRow(row)
-        deHTML = de
-        enHTML = en
+
+        log.info("Processing card for {} -> {}".format(en,de))
+        card = AnkiCard(DECK_NAME)
+        card.addTag(tag)
+
+        # Handle image on english side of card
         imgUrl = getImageURLFromRow(row)
-        if imgUrl:
-            imgFilename = os.path.basename(imgUrl)
-            imgPath = "{}/{}".format(IMAGES_DIR, imgFilename)
-            log.info("Downloading image: " + imgUrl)
-            downloadFromURL(imgUrl, imgPath)
-            reduceImageSize(imgPath)
-            img64 = fileToBase64(imgPath)
-            enHTML = enHTML + '<br><img src="' + imgFilename+ '" width="50%" height="50%">'
-            invoke(storeMediaFile(imgFilename, img64))
+        imgFilename = storeImage(imgUrl)
+        card.addEnglish(en, imgFilename)
 
         audioUrl = getAudioURLFromRow(row)
-        if audioUrl:
-            audioFilename = os.path.basename(audioUrl)
-            audioPath = "{}/{}".format(AUDIO_DIR, audioFilename)
-            log.info("Downloading audio: " + audioUrl)
-            downloadFromURL(audioUrl, audioPath)
-            reduceAudioSize(audioPath)
-            audio64 = fileToBase64(audioPath)
-            invoke(storeMediaFile(audioFilename, audio64))
-            deHTML = "[sound:{}]".format(audioFilename) + deHTML
-        else:
-            log.warning("No audio found:" + de)
+        audioFilename = storeAudio(audioUrl)
+        card.addGerman(de, audioFilename)
 
-        req = addNoteJSON(deck, tags, enHTML, deHTML)
+        if en in cards:
+            log.info(en + " is a duplicate. Appending German entry to previous card.")
+            (cards[en]).addGerman(card.getGerman())
+        else:
+            cards[en] = card
+
+def storeCards(cards):
+    for card in cards.values():
+        req = addNoteJSON(card.deck,
+                          card.tags,
+                          card.getEnglish(),
+                          card.getGerman())
         try:
             res = invoke(req)
-            if en != enHTML:
-                log.info("Added card with image {}: {}".format(res, en))
+            if card.hasImage:
+                log.info("Added card with image {}: {}".format(res, card.english))
             else:
-                log.info("Added card {}: {}".format(res, en))
+                log.info("Added card {}: {}".format(res, card.english))
         except Warning as err:
-            log.warning(err.args[0] + ": " + en)
+            log.warning(err.args[0] + ": " + card.english)
         except Exception as err:
-            log.error(err.args[0] + ": " + en)
+            log.error(err.args[0] + ": " + card.english)
 
 
 def main():
@@ -235,13 +328,22 @@ def main():
 
 
     log.info("Starting...")
+
+    log.info("Creating deck if it does not exist: " + DECK_NAME)
+    invoke(createDeckJSON(DECK_NAME))
+
     log.info("Using lessons from: " + TOP_URL)
     lessonURLs = getLessonURLs(TOP_URL)
 
+    cards = {} # For duplicates we'll append the german values
     for url in lessonURLs:
         log.info("Building Anki cards from: " + url)
-        buildAnkiFromURL(url)
+        buildAnkiFromURL(cards, url)
         log.info("Done with lesson: " + url)
+
+    log.info("Creating all cards in Anki now...")
+    storeCards(cards)
+    log.info("Done!")
 
 
 if __name__ == '__main__':
