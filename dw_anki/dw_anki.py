@@ -119,7 +119,7 @@ def addNoteJSON(deck, tags, front, back):
                     "Back": back
                 },
                 "options": {
-                    "allowDuplicate": False
+                    "allowDuplicate": True
                 },
                 "tags": tags
             }
@@ -145,7 +145,12 @@ def getGermanFromRow(reihe):
 
 def getEnglishFromRow(row):
     word = row.xpath('.//div[3]/div/p/text()')
-    return word[0] #TODO: check that we only got 1?
+    if not word: # some words randomly in a table
+        word = row.xpath('.//div[3]/div/table/tbody/tr/td/text()')
+    if word:
+        return word[0] #TODO: check that we only got 1?
+    log.error('Failed to find any word on the english side.')
+    return None
 
 
 def getImageURLFromRow(row):
