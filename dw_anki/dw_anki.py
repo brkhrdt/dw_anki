@@ -133,14 +133,18 @@ def addNoteJSON(deck, tags, front, back):
 #
 
 def getGermanFromRow(reihe):
-    woerter = reihe.xpath('.//strong[@dir="auto"]/text()')
-    notizen = reihe.xpath('.//div[1]/div/p/text()')
-    notiz = (''.join(notizen)).replace('\n','')
-    #//*[@id="html_body"]/div[2]/div/div/div/div[2]/div[3]/div[1]/div/p/text()
-    wort = woerter[0]
-    if notiz:
-        wort = wort + " <br><small><i>" + notiz + "</i></small>"
-    return wort
+    try:
+        woerter = reihe.xpath('.//strong[@dir="auto"]/text()')
+        notizen = reihe.xpath('.//div[1]/div/p/text()')
+        notiz = (''.join(notizen)).replace('\n','')
+        #//*[@id="html_body"]/div[2]/div/div/div/div[2]/div[3]/div[1]/div/p/text()
+        wort = woerter[0]
+        if notiz:
+            wort = wort + " <br><small><i>" + notiz + "</i></small>"
+        return wort
+    except:
+        log.warning('Failed to find any word on the german side.')
+        return None
 
 
 def getEnglishFromRow(row):
@@ -149,7 +153,7 @@ def getEnglishFromRow(row):
         word = row.xpath('.//div[3]/div/table/tbody/tr/td/text()')
     if word:
         return word[0] #TODO: check that we only got 1?
-    log.error('Failed to find any word on the english side.')
+    log.warning('Failed to find any word on the english side.')
     return None
 
 
@@ -274,12 +278,17 @@ def buildAnkiFromURL(cards, vocabURL):
     page = requests.get(vocabURL)
     tree = html.fromstring(page.content)
 
-    vocab_rows = tree.xpath('//div[@class="row vocabulary "]')
+    vocab_rows = tree.xpath("//div[contains(@class, 'row vocabulary')]")
     tag = lessonName
 
     for row in vocab_rows:
         de = getGermanFromRow(row)
         en = getEnglishFromRow(row)
+        if en == None or de == None:
+            log.info('Could not find english and/or german word from row. Possibly the last row is empty div.')
+            continue
+        log.debug("de = " + de)
+        log.debug("en = " + en)
 
         log.info("Processing card for {} -> {}".format(en,de))
         card = AnkiCard(DECK_NAME)
